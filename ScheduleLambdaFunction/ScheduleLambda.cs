@@ -12,27 +12,29 @@ using System.Threading.Tasks;
 namespace ScheduleLambdaFunction
 {
     /// <summary>
-    /// Retrieval and storage of information about an existing Lambda function
+    /// Retrieve and store information about an existing Lambda function
     /// </summary>
     class LambdaInfo
     {
-        public string Arn { get; set; }
-        public string HandlerName { get; set; }
-        public string RoleName { get; set; }
+        public string Arn { get; }
+        public string HandlerName { get; }
+        public string RoleName { get; }
+
 
         /// <summary>
-        /// Retrieve and store information about an existing Lambda function
+        /// Initialize object with information about an existing Lambda function
         /// </summary>
         /// <param name="LambdaName"></param>
         /// <param name="region"></param>
-        public async Task GetInfoAsync(string LambdaName, RegionEndpoint region)
+        /// <exception cref="AmazonLambdaException"></exception>"
+        public LambdaInfo(string LambdaName, RegionEndpoint region)
         {
-            // Retrieve information about the Lambda function
-            var lambdaClient = new AmazonLambdaClient(region);
             try
             {
-                // Retrieve and store the info
-                var response = await lambdaClient.GetFunctionAsync(LambdaName);
+                // Retrieve and store information about the Lambda function
+                var lambdaClient = new AmazonLambdaClient(region);
+                var infoTask = lambdaClient.GetFunctionAsync(LambdaName);
+                var response = infoTask.Result;
                 Arn = response.Configuration.FunctionArn;
                 HandlerName = response.Configuration.Handler;
                 RoleName = response.Configuration.Role;
@@ -40,14 +42,27 @@ namespace ScheduleLambdaFunction
             catch (AggregateException aex)
             {
                 foreach (Exception ex in aex.InnerExceptions)
-                    Log.Error("GetInfoAsync: " + ex.Message);
-                throw;
+                {
+                    Log.Error("LambdaInfo constructor: " + ex.Message);
+                }
+                throw aex.InnerException;
             }
         }
     }
 
+
+    /// <summary>
+    /// Create and manage the invoking of an AWS Lambda function based on a schedule
+    /// </summary>
+    /// <remarks>
+    ///     Entry points:
+    ///         ScheduleLambdaFunction
+    ///         UnScheduleLambdaFunction (also deletes the schedule resources)
+    ///         ToggleScheduledLambda  (enables/disables schedule; does not delete resources)
+    /// </remarks>
     class ScheduleLambda
     {
+
         /// <summary>
         /// Schedule the repeated invocation of an existing AWS Lambda function
         /// </summary>
@@ -64,17 +79,13 @@ namespace ScheduleLambdaFunction
             RegionEndpoint region)
         {
             // Retrieve information about the Lambda function
-            var lambdaInfo = new LambdaInfo();
-            var infoResponse = lambdaInfo.GetInfoAsync(LambdaName, region);
+            var lambdaInfo = new LambdaInfo(LambdaName, region);
 
             // Create EventBridge rule with the desired schedule
             var eventRule = CreateRuleWithScheduleAsync(EventRuleName, EventSchedule, region);
-
-            // Wait for Lambda info and event rule tasks
-            infoResponse.Wait();
             var eventArn = eventRule.Result;
 
-            // Debug
+            // Make sure we have reasonable values
             Log.Debug("FunctionInfo.Arn: " + lambdaInfo.Arn);
             Log.Debug("FunctionInfo.Handler: " + lambdaInfo.HandlerName);
             Log.Debug("FunctionInfo.Role: " + lambdaInfo.RoleName);
@@ -92,10 +103,11 @@ namespace ScheduleLambdaFunction
             if (response.FailedEntryCount != 0)
             {
                 var msg = $"Could not set {LambdaName} as the target for {EventRuleName}";
-                Log.Error(msg);
+                Log.Error("ScheduleLambdaFunction: " + msg);
                 throw new AmazonEventBridgeException(msg);
             }
         }
+
 
         /// <summary>
         /// Unschedule a Lambda function, deleting the scheduled event resources
@@ -103,18 +115,16 @@ namespace ScheduleLambdaFunction
         /// <param name="LambdaName"></param>
         /// <param name="EventRuleName"></param>
         /// <param name="region">AWS region in which the resources are located</param>
-        /// <exception cref="AmazonEventBridgeException"></exception>
-        /// <exception cref="AmazonLambdaException"></exception>
         public static void UnScheduleLambdaFunction(
             string LambdaName,
             string EventRuleName,
             RegionEndpoint region)
         {
-            // Remove Lambda target from the Events scheduled rule
-            // Note: Target must be removed before deleting the Lambda function or rule
-            var eventsClient = new AmazonEventBridgeClient(region);
             try
             {
+                // Remove Lambda target from the Events scheduled rule
+                // Note: Target must be removed before deleting the Lambda function or event rule
+                var eventsClient = new AmazonEventBridgeClient(region);
                 var eventRemoveTask = eventsClient.RemoveTargetsAsync(new RemoveTargetsRequest
                 {
                     Rule = EventRuleName,
@@ -122,6 +132,18 @@ namespace ScheduleLambdaFunction
                 });
                 eventRemoveTask.Wait();  // Block, can't delete rule until it's removed from targets
                 Log.Debug($"Removed target {LambdaName} from scheduled rule {EventRuleName}");
+
+                // Delete the EventBridge rule
+                var deleteRuleTask = eventsClient.DeleteRuleAsync(new DeleteRuleRequest
+                {
+                    Name = EventRuleName
+                });
+                deleteRuleTask.Wait();
+                Log.Debug("Deleted scheduled rule");
+
+                // Remove EventBridge-invoke permission from the Lambda function
+                RemoveLambdaInvokePermission(LambdaName, region);
+                Log.Debug("Removed invoke permission");
             }
             catch (AggregateException aex)
             {
@@ -129,28 +151,8 @@ namespace ScheduleLambdaFunction
                 foreach (Exception ex in aex.InnerExceptions)
                     Log.Error("UnScheduleLambdaFunction: " + ex.Message);
             }
-
-            // Delete the EventBridge rule
-            try
-            {
-                var deleteRuleTask = eventsClient.DeleteRuleAsync(new DeleteRuleRequest
-                {
-                    Name = EventRuleName
-                });
-                deleteRuleTask.Wait();
-                Log.Debug("Deleted scheduled rule");
-            }
-            catch (AggregateException aex)
-            {
-                // Log the exception(s) and fall through
-                foreach (Exception ex in aex.InnerExceptions)
-                    Log.Error(ex.Message);
-            }
-
-            // Remove EventBridge-invoke permission from the Lambda function
-            RemoveLambdaInvokePermission(LambdaName, region);
-            Log.Debug("Removed invoke permission");
         }
+
 
         /// <summary>
         /// Enable/disable the schedule event
@@ -160,10 +162,10 @@ namespace ScheduleLambdaFunction
         /// <exception cref="AmazonEventBridgeException"></exception>
         public static string ToggleScheduledLambda(string EventRuleName, RegionEndpoint region)
         {
-            var eventsClient = new AmazonEventBridgeClient(region);
             try
             {
                 // Retrieve the schedule-event rule's current state
+                var eventsClient = new AmazonEventBridgeClient(region);
                 var describeTask = eventsClient.DescribeRuleAsync(new DescribeRuleRequest
                 {
                     Name = EventRuleName,
@@ -193,11 +195,12 @@ namespace ScheduleLambdaFunction
             {
                 foreach (Exception ex in aex.InnerExceptions)
                 {
-                    Log.Error(ex.Message);
+                    Log.Error("ToggleScheduledLambda: " + ex.Message);
                 }
-                throw new AmazonEventBridgeException($"ToggleScheduledLambda: Could not retrieve scheduled event rule {EventRuleName}");
+                throw aex.InnerException;
             }
         }
+
 
         /// <summary>
         /// Define an EventBridge rule with a schedule
@@ -212,10 +215,10 @@ namespace ScheduleLambdaFunction
             string EventSchedule,
             RegionEndpoint region)
         {
-            // Create an EventBridge rule with the desired schedule
-            var eventsClient = new AmazonEventBridgeClient(region);
             try
             {
+                // Create an EventBridge rule with the desired schedule
+                var eventsClient = new AmazonEventBridgeClient(region);
                 var putRuleResponse = await eventsClient.PutRuleAsync(new PutRuleRequest
                 {
                     Name = EventRuleName,
@@ -227,7 +230,7 @@ namespace ScheduleLambdaFunction
             {
                 foreach (Exception ex in aex.InnerExceptions)
                     Log.Error("CreateRuleWithScheduleAsync: " + ex.Message);
-                throw;
+                throw aex.InnerException;
             }
 
             /*
@@ -244,10 +247,11 @@ namespace ScheduleLambdaFunction
             {
                 foreach (Exception ex in aex.InnerExceptions)
                     Log.Error("CreateRuleWithScheduleAsync: " + ex.Message);
-                throw;
+                throw aex.InnerException;
             }
             */
         }
+
 
         /// <summary>
         /// Add permission to the Lambda function so it can be invoked by EventBridge
@@ -255,14 +259,16 @@ namespace ScheduleLambdaFunction
         /// <param name="LambdaName"></param>
         /// <param name="EventArn">EventBridge rule ARN to grant permissions for</param>
         /// <param name="region"></param>
+        /// <exception cref="AmazonLambdaException"></exception>"
         private static async Task AddLambdaInvokePermission(
             string LambdaName,
             string EventArn,
             RegionEndpoint region)
         {
-            var lambdaClient = new AmazonLambdaClient(region);
             try
             {
+                // Add invoke permission
+                var lambdaClient = new AmazonLambdaClient(region);
                 await lambdaClient.AddPermissionAsync(new AddPermissionRequest
                 {
                     FunctionName = LambdaName,
@@ -276,9 +282,10 @@ namespace ScheduleLambdaFunction
             {
                 foreach (Exception ex in aex.InnerExceptions)
                     Log.Error("AddLambdaInvokePermission: " + ex.Message);
-                throw;
+                throw aex.InnerException;
             }
         }
+
 
         /// <summary>
         /// Remove permission for EventBridge to invoke the Lambda function
@@ -289,10 +296,10 @@ namespace ScheduleLambdaFunction
             string LambdaName,
             RegionEndpoint region)
         {
-            var lambdaClient = new AmazonLambdaClient(region);
             try
             {
                 // Remove invoke permission
+                var lambdaClient = new AmazonLambdaClient(region);
                 var permTask = lambdaClient.RemovePermissionAsync(new Amazon.Lambda.Model.RemovePermissionRequest
                 {
                     FunctionName = LambdaName,
@@ -312,6 +319,7 @@ namespace ScheduleLambdaFunction
             }
         }
 
+
         /// <summary>
         /// Set the Lambda function as the target of the scheduled event rule
         /// </summary>
@@ -320,19 +328,20 @@ namespace ScheduleLambdaFunction
         /// <param name="LambdaArn"></param>
         /// <param name="region"></param>
         /// <returns>PutTargetsResponse object</returns>
+        /// <exception cref="AmazonEventBridgeException"></exception>"
         private static async Task<PutTargetsResponse> SetEventTarget(
             string EventRuleName,
             string LambdaName,
             string LambdaArn,
             RegionEndpoint region)
         {
-            var eventClient = new AmazonEventBridgeClient(region);
-            List<Target> targets = new List<Target>()
-            {
-                new Target(){ Id = LambdaName, Arn = LambdaArn },
-            };
             try
             {
+                var eventClient = new AmazonEventBridgeClient(region);
+                List<Target> targets = new List<Target>()
+                {
+                    new Target(){ Id = LambdaName, Arn = LambdaArn },
+                };
                 return await eventClient.PutTargetsAsync(new PutTargetsRequest
                 {
                     Rule = EventRuleName,
@@ -343,7 +352,7 @@ namespace ScheduleLambdaFunction
             {
                 foreach (Exception ex in aex.InnerExceptions)
                     Log.Error("SetEventTarget: " + ex.Message);
-                throw;
+                throw aex.InnerException;
             }
         }
     }

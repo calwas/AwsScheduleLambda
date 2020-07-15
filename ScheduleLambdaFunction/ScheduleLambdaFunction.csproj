@@ -3,6 +3,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <Authors>Steven Calwas</Authors>
+    <Company></Company>
+    <Description>Invoke an AWS Lambda function on a schedule</Description>
+    <PackageProjectUrl>https://github.com/calwas/AwsScheduleLambda</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/calwas/AwsScheduleLambda</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Product>Schedule AWS Lambda Function</Product>
   </PropertyGroup>
 
   <ItemGroup>

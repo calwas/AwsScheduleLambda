@@ -14,7 +14,7 @@ namespace SampleLambdaFunction
         /// <summary>
         /// A simple function that takes a string and does a ToUpper
         /// </summary>
-        /// <param name="event">
+        /// <param name="@event">
         ///   <para>EventBridge scheduled event in JSON</para>
         ///   <para>
         ///     {

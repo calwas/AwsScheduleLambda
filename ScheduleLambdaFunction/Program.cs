@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 // using System.Threading.Tasks;
 using Amazon;
+using Amazon.EventBridge;
 // using Amazon.S3;
 // using Amazon.S3.Model;
 using CommandLine;
@@ -18,9 +19,13 @@ namespace ScheduleLambdaFunction
         static readonly string eventSchedule = "cron(0/1 * * * ? *)";  // Trigger every minute of every day
         static readonly RegionEndpoint region = RegionEndpoint.USWest1;
 
+
+        /// <summary>
+        /// Program entry point
+        /// </summary>
+        /// <param name="args"></param>
         static void Main(string[] args)
         {
-
             // Init logging
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
@@ -32,20 +37,25 @@ namespace ScheduleLambdaFunction
                 .WithParsed(ParsedOptions)
                 .WithNotParsed(ParsedErrors);
 
-            // Create a Lambda function that is invoked on a schedule
+            // Configure a Lambda function to be invoked on a schedule
             try
             {
                 Log.Information($"Scheduling Lambda function {lambdaName}...");
                 ScheduleLambda.ScheduleLambdaFunction(lambdaName, eventRuleName, eventSchedule, region);
                 Log.Information("Done");
             }
-            catch
+            catch (Exception ex)
             {
-                Log.Information("Operation failed");
+                Log.Information("Operation failed: " + ex.Message);
                 Environment.Exit(1);
             }
         }
 
+
+        /// <summary>
+        /// Process supported command-line options
+        /// </summary>
+        /// <param name="options"></param>
         static void ParsedOptions(CmdLineOptions options)
         {
             if (options.Delete)
@@ -58,13 +68,24 @@ namespace ScheduleLambdaFunction
 
             if (options.Toggle)
             {
-                // Toggle the state of the scheduled event (enable/disable)
-                var state = ScheduleLambda.ToggleScheduledLambda(eventRuleName, region);
-                Log.Information("Toggled scheduled Lambda function to " + state);
-                Environment.Exit(0);
+                try
+                {
+                    // Toggle the state of the scheduled event (enable/disable)
+                    var state = ScheduleLambda.ToggleScheduledLambda(eventRuleName, region);
+                    Log.Information("Toggled scheduled Lambda function to " + state);
+                    Environment.Exit(0);
+                }catch (AmazonEventBridgeException ex){
+                    Log.Information("ERROR: " + ex.Message);
+                    Environment.Exit(1);
+                }
             }
         }
 
+
+        /// <summary>
+        /// Process --version and --help command-line options and unsupported options
+        /// </summary>
+        /// <param name="errs"></param>
         static void ParsedErrors(IEnumerable<Error> errs)
         {
             var result = -1;  // Default program exit value
@@ -78,6 +99,7 @@ namespace ScheduleLambdaFunction
             }
             Environment.Exit(result);
         }
+
 
         /*
          * Simple S3 test to monitor the flow of async/await code
@@ -94,6 +116,7 @@ namespace ScheduleLambdaFunction
                 Console.WriteLine($"Main: Bucket {bucket.BucketName}, Created on {bucket.CreationDate}");
             }
         }
+
 
         static async Task<ListBucketsResponse> ListS3BucketsAsync()
         {
