@@ -1,0 +1,5 @@
+.vs/
+SampleLambdaFunction/bin/
+SampleLambdaFunction/obj/
+ScheduleLambdaFunction/bin/
+ScheduleLambdaFunction/obj/
