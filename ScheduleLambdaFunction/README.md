@@ -9,7 +9,7 @@ The Lambda function that the application schedules can be written in any program
 function written in C# is provided in the repository's `SampleLambdaFunction` project.
 
 By default, the `ScheduleLambdaFunction` configures the sample Lambda function to be invoked every 
-minute. It assumes the Lambda function is located in the AWS US-West-1 (N. California) region.
+minute. It assumes the Lambda function is located in the AWS region US-West-1 (N. California).
 
 To configure a different Lambda function in a different region to another schedule, edit the constant values 
 defined in the `Program.cs` source file. Edits to the other source files should not be necessary. 
@@ -20,7 +20,7 @@ defined in the `Program.cs` source file. Edits to the other source files should 
 
 ## Source code files
 
-* `Program.cs` : Application entry point. Identifies the Lambda function, AWS region, etc. to be scheduled.
+* `Program.cs` : Application entry point. Identifies the Lambda function, AWS region, etc. to be scheduled
 * `ScheduleLambda.cs` : Create and manage the AWS resources that schedule the Lambda function
 * `CmdLineOptions.cs` : Define the application's command-line options
 

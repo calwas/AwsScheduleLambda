@@ -1,11 +1,12 @@
 # Sample AWS Lambda Function
 
 The `SampleLambdaFunction` project provides a simple AWS Lambda function written in C# for .NET Core. The function 
-is used by the `ScheduleLambdaFunction` to demonstrate how to configure a Lambda function to be invoked on a schedule.
+is used by the `ScheduleLambdaFunction` application to demonstrate how to configure a Lambda function to be invoked 
+on a schedule.
 
 ## Source code files
 
-* `Function.cs` : Simple Lambda function. Logs its input arguments and returns a JSON SUCCESS string.
+* `Function.cs` : Simple Lambda function. Logs its input arguments and returns a JSON "SUCCESS" string.
 
 ## Build the project
 
