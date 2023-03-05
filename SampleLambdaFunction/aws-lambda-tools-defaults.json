@@ -9,14 +9,19 @@
     "profile"     : "default",
     "region"      : "us-west-1",
     "configuration" : "Release",
-    "framework"     : "netcoreapp3.1",
-    "function-runtime" : "dotnetcore3.1",
+    "function-runtime" : "dotnet6",
     "function-memory-size" : 256,
     "function-timeout"     : 30,
     "function-handler"     : "SampleLambdaFunction::SampleLambdaFunction.Function::ScheduledFunctionHandler",
     "function-name"        : "ScheduledFunction",
     "function-description" : "",
-    "function-role"        : "arn:aws:iam::958265919900:role/lambda_exec_ScheduledFunction",
     "tracing-mode"         : "PassThrough",
-    "environment-variables" : ""
+    "environment-variables" : "",
+    "framework"             : "net6.0",
+    "package-type"          : "Zip",
+    "function-role"         : "arn:aws:iam::958265919900:role/SCalwas.lambda.exec_ScheduledFunction",
+    "function-architecture" : "x86_64",
+    "function-subnets"      : "",
+    "function-security-groups" : "",
+    "image-tag"                : ""
 }
